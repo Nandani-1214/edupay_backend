@@ -4,7 +4,6 @@ from .models import Vendor
 from .models import Parent
 
 
-
 class StudentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Student
@@ -23,4 +22,5 @@ class ParentSerializer(serializers.ModelSerializer):
         model = Parent
         fields = ['id', 'name', 'email', 'relation', 'address', 'phone', 'studentRoll']
         
+
 

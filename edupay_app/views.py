@@ -1,12 +1,11 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import Admin
-from .models import Student
-from .serializers import StudentSerializer
-from .models import Vendor
-from .serializers import VendorSerializer
-from .models import Parent, Student
-from .serializers import ParentSerializer
+from .serializers import *
+from django.http import JsonResponse
+#add-money
+import json
+from django.views.decorators.csrf import csrf_exempt
+from .models import *
 
 from rest_framework import status
 @api_view(['POST'])
@@ -139,7 +138,6 @@ def delete_vendor(request, id):
     return Response({"message": "Vendor Deleted Successfully"})
 
 #parent 
-
 # GET ALL PARENTS
 @api_view(['GET'])
 def get_parents(request):
@@ -147,26 +145,31 @@ def get_parents(request):
     serializer = ParentSerializer(parents, many=True)
     return Response(serializer.data)
 
-
 # ADD PARENT
 @api_view(['POST'])
 def add_parent(request):
     try:
+        print ('in')
         roll = request.data.get("studentRoll")
+        print("roll==>",roll)
 
-        if not roll:
-            return Response({"error": "Student Roll Number required"}, status=400)
+        # if not roll:
+        #     print ("not rle")
+        #     return Response({"error": "Student Roll Number required"}, status=400)
 
         student = Student.objects.get(roll=roll)
-
+        print('student==>',student)
+        
         parent = Parent.objects.create(
             student=student,
             name=request.data.get("name"),
             email=request.data.get("email"),
             relation=request.data.get("relation"),
             address=request.data.get("address"),
+            # roll_number = parent.student_roll_no,
             phone=student.phone  # AUTO COPY FROM STUDENT
         )
+        print("parent==>",parent)
 
         return Response({"message": "Parent Added Successfully"}, status=201)
 
@@ -186,3 +189,122 @@ def delete_parent(request, id):
         return Response({"message": "Deleted successfully"})
     except Parent.DoesNotExist:
         return Response({"error": "Parent not found"}, status=404)
+    
+
+
+@csrf_exempt
+def check_parent_email(request):
+
+    if request.method == "POST":
+
+        data = json.loads(request.body)
+        email = data.get("email")
+
+        try:
+            parent = Parent.objects.get(email=email)
+
+            return JsonResponse({
+                "status": "success",
+                "message": "Parent Found",
+                "parent_id": parent.id,
+                "email": parent.email
+            })
+
+        except Parent.DoesNotExist:
+
+            return JsonResponse({
+                "status": "error",
+                "message": "Parent is not registered"
+            })
+
+    return JsonResponse({
+        "status": "error",
+        "message": "Invalid request"
+    })
+
+
+@csrf_exempt
+def get_student_details(request):
+
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            email = data.get("email")
+
+            parent = Parent.objects.get(email=email)
+            student = parent.student
+
+            return JsonResponse({
+                "status": "success",
+                "name": student.name,
+                "class": student.student_class,
+                "division": student.division,
+                "roll": student.roll,
+                "phone": student.phone,
+                "rfid": student.rfid
+            })
+
+        except Parent.DoesNotExist:
+            return JsonResponse({
+                "status": "error",
+                "message": "Parent not found"
+            })
+
+    return JsonResponse({
+        "status": "error",
+        "message": "Invalid request method"
+    })
+
+
+
+
+@csrf_exempt
+def add_money(request):
+
+    if request.method == "POST":
+
+        data = json.loads(request.body)
+
+        email = data.get("email")
+        amount = data.get("amount")
+
+        try:
+            parent = Parent.objects.get(email=email)
+
+        except Parent.DoesNotExist:
+            return JsonResponse({
+                "status": "error",
+                "message": "Parent not found"
+            })
+
+        student_id = parent.student_id
+
+        try:
+            student = Student.objects.get(id=student_id)
+
+        except Student.DoesNotExist:
+            return JsonResponse({
+                "status": "error",
+                "message": "Student not found"
+            })
+
+        wallet, created = Wallet.objects.get_or_create(student=student)
+
+        wallet.balance += float(amount)
+        wallet.save()
+
+        Transaction.objects.create(
+            student=student,
+            amount=amount
+        )
+
+        return JsonResponse({
+            "status": "success",
+            "message": "Money added successfully",
+            "new_balance": wallet.balance
+        })
+
+    return JsonResponse({
+        "status": "error",
+        "message": "POST request required"
+    })
