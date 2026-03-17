@@ -9,7 +9,6 @@ class StudentSerializer(serializers.ModelSerializer):
         model = Student
         fields = '__all__'
 
-
 class VendorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vendor
@@ -23,4 +22,4 @@ class ParentSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'email', 'relation', 'address', 'phone', 'studentRoll']
         
 
-
+#vendor login

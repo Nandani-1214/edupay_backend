@@ -6,7 +6,8 @@ from django.http import JsonResponse
 import json
 from django.views.decorators.csrf import csrf_exempt
 from .models import *
-
+from .models import Vendor
+from .serializers import VendorSerializer
 from rest_framework import status
 @api_view(['POST'])
 def admin_login(request):
@@ -77,6 +78,14 @@ def delete_student(request, id):
     return Response({"message": "Student Deleted Successfully"})
     
 #vendor module 
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Vendor
+from .serializers import VendorSerializer
+
+
+# ===============================
 # GET ALL VENDORS
 # ===============================
 @api_view(['GET'])
@@ -91,14 +100,23 @@ def get_vendors(request):
 # ===============================
 @api_view(['POST'])
 def add_vendor(request):
-    serializer = VendorSerializer(data=request.data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(
-            {"message": "Vendor Added Successfully"},
-            status=status.HTTP_201_CREATED
-        )
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    data = request.data
+
+    vendor = Vendor.objects.create(
+        vendorName=data.get('vendorName'),
+        ownerName=data.get('ownerName'),
+        phone=data.get('phone'),
+        email=data.get('email'),
+        category=data.get('category'),
+        password=data.get('password'),
+        status=True
+    )
+
+    return Response({
+        "message": "Vendor Added Successfully",
+        "vendor_id": vendor.id
+    }, status=status.HTTP_201_CREATED)
 
 
 # ===============================
@@ -106,19 +124,26 @@ def add_vendor(request):
 # ===============================
 @api_view(['PUT'])
 def update_vendor(request, id):
+
     try:
         vendor = Vendor.objects.get(id=id)
     except Vendor.DoesNotExist:
-        return Response(
-            {"error": "Vendor Not Found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
+        return Response({"error": "Vendor Not Found"}, status=404)
 
-    serializer = VendorSerializer(vendor, data=request.data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response({"message": "Vendor Updated Successfully"})
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    data = request.data
+
+    vendor.vendorName = data.get('vendorName', vendor.vendorName)
+    vendor.ownerName = data.get('ownerName', vendor.ownerName)
+    vendor.phone = data.get('phone', vendor.phone)
+    vendor.email = data.get('email', vendor.email)
+    vendor.category = data.get('category', vendor.category)
+
+    if data.get('password'):
+        vendor.password = data.get('password')
+
+    vendor.save()
+
+    return Response({"message": "Vendor Updated Successfully"})
 
 
 # ===============================
@@ -128,15 +153,28 @@ def update_vendor(request, id):
 def delete_vendor(request, id):
     try:
         vendor = Vendor.objects.get(id=id)
+        vendor.delete()
+        return Response({"message": "Vendor deleted successfully"})
     except Vendor.DoesNotExist:
-        return Response(
-            {"error": "Vendor Not Found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
+        return Response({"error": "Vendor not found"}, status=404)
+# ===============================
+# TOGGLE STATUS
+# ===============================
+@api_view(['PATCH'])
+def toggle_vendor_status(request, id):
 
-    vendor.delete()
-    return Response({"message": "Vendor Deleted Successfully"})
+    try:
+        vendor = Vendor.objects.get(id=id)
+    except Vendor.DoesNotExist:
+        return Response({"error": "Vendor Not Found"}, status=404)
 
+    vendor.status = not vendor.status
+    vendor.save()
+
+    return Response({
+        "message": "Vendor Status Updated",
+        "status": vendor.status
+    })
 #parent 
 # GET ALL PARENTS
 @api_view(['GET'])
@@ -179,7 +217,6 @@ def add_parent(request):
     except Exception as e:
         return Response({"error": str(e)}, status=400)
 
-
 # DELETE
 @api_view(['DELETE'])
 def delete_parent(request, id):
@@ -191,7 +228,7 @@ def delete_parent(request, id):
         return Response({"error": "Parent not found"}, status=404)
     
 
-
+#parent login
 @csrf_exempt
 def check_parent_email(request):
 
@@ -222,7 +259,7 @@ def check_parent_email(request):
         "message": "Invalid request"
     })
 
-
+# link student 
 @csrf_exempt
 def get_student_details(request):
 
@@ -255,9 +292,8 @@ def get_student_details(request):
         "message": "Invalid request method"
     })
 
-
-
-
+#add money 
+#add money 
 @csrf_exempt
 def add_money(request):
 
@@ -278,9 +314,11 @@ def add_money(request):
             })
 
         student_id = parent.student_id
+    
 
         try:
             student = Student.objects.get(id=student_id)
+        
 
         except Student.DoesNotExist:
             return JsonResponse({
@@ -290,12 +328,15 @@ def add_money(request):
 
         wallet, created = Wallet.objects.get_or_create(student=student)
 
+        wallet.rfid = student.rfid
         wallet.balance += float(amount)
         wallet.save()
 
         Transaction.objects.create(
             student=student,
-            amount=amount
+            rfid=student.rfid,
+            amount=amount,
+        
         )
 
         return JsonResponse({
@@ -308,3 +349,49 @@ def add_money(request):
         "status": "error",
         "message": "POST request required"
     })
+
+#vendor login
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from .models import Vendor, VendorLogin
+import json
+
+
+@csrf_exempt
+def vendor_login(request):
+
+    if request.method == "POST":
+
+        data = json.loads(request.body)
+
+        email = data.get("email")
+        password = data.get("password")
+
+        try:
+            # check vendor table
+            vendor = Vendor.objects.get(email=email)
+
+            if vendor.password == password:
+
+                # store login record
+                VendorLogin.objects.create(vendor=vendor)
+
+                return JsonResponse({
+                    "success": True,
+                    "vendor_id": vendor.id,
+                    "category": vendor.category
+                })
+
+            else:
+                return JsonResponse({
+                    "success": False,
+                    "message": "Invalid password"
+                })
+
+        except Vendor.DoesNotExist:
+            return JsonResponse({
+                "success": False,
+                "message": "Vendor not found"
+            })
+
+    return JsonResponse({"error": "Invalid request"})
